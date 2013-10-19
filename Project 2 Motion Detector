@@ -1,0 +1,150 @@
+// Motion detector code modified from Learning Processing Example 16-13, Daniel Shiffman
+// Code to make ball follow motion of hand or other object adapted from Learning Processing Example 16-17, Daniel Shiffman
+//playSoundClip function, Ball class, and text additions are my own code
+
+import processing.video.*;//import Processing's video library
+
+Capture video;//declare live video capture object - i.e., the built-in webcam on my MacBook Pro
+
+PImage prevFrame;//declare previous frame as an image object
+
+float threshold = 40;//set threshold for how different a pixel must appear in order to be considered moving
+int xRad = 40;//set ball width
+int yRad = 40;//set ball height
+
+Ball myBall;//declare object of class Ball
+
+PFont font;//declare object of class PFont
+
+void setup() {
+
+  size(640, 480);//create window
+  font = loadFont("NanumBrush-48.vlw");//construct new artsy font and load into variable "font"
+  textFont(font);//make artsy font active
+
+  video = new Capture(this, width, height, 30);//initialize video object using Capture constructor.  "This" simply means "run the video in THIS Processing program."  30 is frame rate.
+  prevFrame = createImage(video.width, video.height, RGB);//take a snapshot image of each frame
+  video.start();//start the webcam automatically
+}
+
+void draw() {
+
+  if (video.available()) {//checks if a video (or live motion in this case) is available
+    prevFrame.copy(video, 0, 0, video.width, video.height, 0, 0, video.width, video.height); // If so, save the previous frame so we can compare
+    prevFrame.updatePixels();//update the pixels in the previous image
+    video.read();//read the current video frame
+  }
+
+  loadPixels();//load the pixels for the current display
+  video.loadPixels();//load the pixels for the live video
+  prevFrame.loadPixels();//load the pixels for the previous video image
+
+  float sumX=0;//declare float to hold sum of x coordinates for all moving pixels
+  float sumY=0;//declare float to hold sum of y coordinates for all moving pixels
+  int motionCount = 0;//declare integer to hold total number of moving pixels
+
+  for (int x = 0; x < video.width; x ++ ) {//Next two lines march through every pixel on the screen
+    for (int y = 0; y < video.height; y ++ ) {
+
+      int loc = x + y*video.width;            // Identifies pixel location
+      color current = video.pixels[loc];      // identifies current color at that pixel location
+      color previous = prevFrame.pixels[loc]; // Identifies previous color at that pixel location
+
+
+      float r1 = red(current); //current rgb values for each pixel
+      float g1 = green(current); 
+      float b1 = blue(current);
+      float r2 = red(previous); //previous rgb values for each pixel
+      float g2 = green(previous); 
+      float b2 = blue(previous);
+      float diff = dist(r1, g1, b1, r2, g2, b2);//compares difference in rgb pixel values:  current vs. previous frame
+
+      if (diff > threshold) {  //if color has changed, there is motion at that pixel.  Does it exceed the threshold?    
+
+        sumX += x;//add up the x coordinates of all the moving pixels
+        sumY += y;//add up the y coordinates of all the moving pixels
+        motionCount++;//sum the total number of pixels that are moving
+
+        // Establish blueish gray color
+        color c = color(6, 52, 122);
+        // Set pixels to appropriate color
+        pixels[loc] = c;// If motion exceeds threshold, display blueish gray
+      } 
+      else {
+        pixels[loc] = color(200);// If not, display light gray
+      }//end else statement
+    }//end "pixel coloring" if statement
+  }//end for statement which marches through each pixel and colors it depending on movement
+
+  updatePixels();//apply coloring changes determined from for statement above, to the array of pixels
+  float avgX = sumX / motionCount;//determine average horizontal location of most significant motion 
+  float avgY = sumY / motionCount; //determine average vertical location of most significant motion
+
+  // Draw a circle located at point of most significant motion, color it based on that location
+  smooth();
+  noStroke();
+  float ballR = map(avgX, 0, width, 0, 255);//use horizontal location to set R value
+  float ballG = 100;//G value is fixed at 100
+  float ballB = map(avgY, 0, height, 0, 255);//use vertical location to set B value
+  //fill(ballR,ballG,ballB);//color the ball based on RGB values determined above
+  //ellipse(avgX,avgY,xRad,yRad);//locate the circle at the point of most significant motion
+  myBall = new Ball(ballR, ballG, ballB, avgX, avgY, xRad, yRad);//initialize myBall object and pass in parameters required by constructor
+  myBall.drawBall();//use drawBall() function in Ball class below to draw the ball
+
+  playSoundClip(3,"bouncingball.mov","beachball.mov", "energyball.mov");//play one of 3 random sound clips, # and name of clips passed in as parameters
+
+  fill(206, 0, 0);//set font color to reddish
+  textSize(36);//set font size to 36
+  text ("Move the ball with your hand to change colour", 60, 40);//message to user, top of frame
+  text ("Press the mouse to play music", 80, 430);//message to user, bottom of frame
+}//end draw function
+
+boolean sketchFullScreen() {//play the sketch at full screen for projector purposes
+  return true;
+}//end sketchFullScreen function
+
+void playSoundClip (int numClips, String soundClip1, String soundClip2, String soundClip3) {//this function plays one of three sound clips if the mouse is pressed
+
+  if (mousePressed) {
+
+    int r = int(random(0, 3));//pick a random number of 0, 1, or 2
+    println(r);//show which random sound clip was picked - used for diagnostic purposes
+    Movie[]soundClips = new Movie[numClips];//create a new array object of class Movie with the same number of slots as there are items in the array clipNames
+    String [] clipNames = {
+      soundClip1, soundClip2, soundClip3
+    };//declare, create, and assign an array populated with sound clip titles
+    soundClips[r] = new Movie(this, clipNames[r]);//pick a random sound clip from the clipNames array and put it into the soundClips array
+    soundClips[r].play();//play the randomly selected sound clip
+  }//end "mousePressed" if statement
+}//end SoundClip function
+
+class Ball {//re-usable class to draw a ball
+
+  float red;//class has 6 fields - these are similar to variables
+  float green;
+  float blue;
+  int radX;
+  int radY;
+  float locX;
+  float locY;
+
+  Ball(float tempR, float tempG, float tempB, float tempX, float tempY, int tempRadX, int tempRadY)//constructor for Ball class requires RGB, location, and size parameters)
+
+  {
+    red = tempR;//set each field to the value passed in by the constructor's parameters
+    green=tempG;
+    blue=tempB;
+    radX = tempRadX;
+    radY = tempRadY; 
+    locX = tempX;
+    locY = tempY;
+  }
+
+  void drawBall() {//function which draws the ball 
+    smooth();
+    noStroke();
+    fill(red, green, blue);//color the ball based on RGB values determined above
+    ellipse(locX, locY, radX, radY);//locate the circle and size it based on location and radius values determined above
+  }//end function drawBall
+
+}//end class Ball
