@@ -66,7 +66,7 @@ void draw() {
         motionCount++;//sum the total number of pixels that are moving
 
         // Establish blueish gray color
-        color c = color(6, 52, 122);
+        color c = color(6,52,122);
         // Set pixels to appropriate color
         pixels[loc] = c;// If motion exceeds threshold, display blueish gray
       } 
@@ -109,10 +109,8 @@ void playSoundClip (int numClips, String soundClip1, String soundClip2, String s
 
     int r = int(random(0, 3));//pick a random number of 0, 1, or 2
     println(r);//show which random sound clip was picked - used for diagnostic purposes
-    Movie[]soundClips = new Movie[numClips];//create a new array object of class Movie with the same number of slots as there are items in the array clipNames
-    String [] clipNames = {
-      soundClip1, soundClip2, soundClip3
-    };//declare, create, and assign an array populated with sound clip titles
+    Movie[]soundClips = new Movie[numClips];//create a new array object of class Movie with the number of sound clips passed in via the constructor
+    String [] clipNames = {soundClip1, soundClip2, soundClip3};//declare, create, and assign an array populated with sound clip titles
     soundClips[r] = new Movie(this, clipNames[r]);//pick a random sound clip from the clipNames array and put it into the soundClips array
     soundClips[r].play();//play the randomly selected sound clip
   }//end "mousePressed" if statement
@@ -128,7 +126,7 @@ class Ball {//re-usable class to draw a ball
   float locX;
   float locY;
 
-  Ball(float tempR, float tempG, float tempB, float tempX, float tempY, int tempRadX, int tempRadY)//constructor for Ball class requires RGB, location, and size parameters)
+  Ball(float tempR, float tempG, float tempB, float tempX, float tempY, int tempRadX, int tempRadY)//constructor for Ball class)
 
   {
     red = tempR;//set each field to the value passed in by the constructor's parameters
