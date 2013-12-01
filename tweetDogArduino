@@ -1,0 +1,41 @@
+
+int dogMat;//holds force sensor reading
+int lightKey;//holds input from Processing
+int ledPin=12;//LED
+
+void setup()
+{
+  Serial.begin(115200);//open serial port
+  pinMode(ledPin, OUTPUT);//set LED as output
+}
+
+void loop(){
+
+  int dogMat = analogRead(A2);//read force sensor on pin 2
+
+    serialSend(dogMat);//send force sensor reading to Processing and print it in Serial monitor
+
+  while (Serial.available()) {//check serial port for inbound data
+    lightKey = Serial.read();//set lightKey to value being sent from Processing
+    if (lightKey==1){//if value is equal to 1, flash the light
+      digitalWrite (ledPin, HIGH);
+      delay(1000);
+      digitalWrite(ledPin, LOW);
+      delay(1000);
+      digitalWrite(ledPin,HIGH);
+      delay(1000);
+      digitalWrite(ledPin,LOW);
+      delay(1000);
+      digitalWrite(ledPin,HIGH);
+      delay(1000);
+      digitalWrite(ledPin,LOW);
+    }
+  }
+}
+
+void serialSend(int sendVal)//sends force sensor value to Processing
+{
+  Serial.println(sendVal);
+  delay(200);//check almost continuously for a reading, slight delay for stability
+
+}
