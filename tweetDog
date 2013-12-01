@@ -518,7 +518,7 @@ void playSoundClip (String soundClip1) {
   Movie[]soundClips = new Movie[numClips];//create a new array object of class Movie with the number of sound clips passed in via the constructor
   String [] clipNames = {
     soundClip1
-  };//declare, create, and assign an array populated with sound clip titles (in this case ony one, but constructed this way for future applications with multiple files)
+  };//declare, create, and assign an array populated with sound clip titles (in this case only one, but constructed this way for future applications with multiple files)
   soundClips[0] = new Movie(this, clipNames[0]);//select the first sound clip from the clipNames array and put it into the soundClips array
   soundClips[0].play();//play the sound clip
 }
