@@ -1,0 +1,524 @@
+import ddf.minim.spi.*;//minim library need for microphone input
+import ddf.minim.signals.*;
+import ddf.minim.*;
+import ddf.minim.analysis.*;
+import ddf.minim.ugens.*;
+import ddf.minim.effects.*;
+
+import processing.video.*;//used to play sound file - Movie class
+import processing.serial.*;//to get serial input from Arduino sketch
+
+import twitter4j.conf.*;//twitter4j library need to connect to Twitter
+import twitter4j.internal.async.*;
+import twitter4j.internal.org.json.*;
+import twitter4j.internal.logging.*;
+import twitter4j.json.*;
+import twitter4j.internal.util.*;
+import twitter4j.management.*;
+import twitter4j.auth.*;
+import twitter4j.api.*;
+import twitter4j.util.*;
+import twitter4j.internal.http.*;
+import twitter4j.*;
+import twitter4j.internal.json.*;
+
+import java.util.*;
+
+//-------------------------Variables-------------------------
+
+Serial port;//Creates an object of class Serial
+
+//Twitter related objects and variables below
+List<Status>statuses = null;
+TwitterFactory twitterFactory;
+Twitter twitter;
+ArrayList<String> words = new ArrayList();
+
+//Message strings
+String msgOut = "";
+String barkTwit="";
+String mediumBarkTwit = "";
+String strongBarkTwit = "";
+String forceTwit ="";
+String twitMessage = "";
+String updateTwit="";
+String twitterKey= "";//compared to homeKey to see if keywords match
+String homeKey = "Artiehome";//holds coded key for checking Twitter input
+String combinedTwit = "";
+String oldTweet;//checks if previous inbound Tweet matches current, if so, won't play audio or flash LED
+
+
+//Variables related to force sensor input
+int ardInput1;//this holds the force sensor reading
+int tempArd;//hold temporary force sensor reading if time threshold to send Tweet not met
+int forceThreshold;//force sensor threshold
+int jumpCount=0;//counts hourly jumps
+int jumpHour;//count hourly jumps
+String jumpGraph;//graphs hourly jumps
+
+//Variables for timer
+int timeThreshold;//only sends a Tweet every X seconds to prevent shutting down Twitter
+int prevMillis=0;//holds last time a Tweet was sent
+int hourMillis=0;//timer for hourly updates
+int currHour;
+int currMin;
+int currSec;
+
+//Variables related to microphone input
+Minim minim;
+AudioInput in;
+int volume = 0;//holds microphone input reading
+int tempVolume=0;//holds temporary microphone input reading if time threshold to send Tweet not met
+int volThreshold;//volume reading threshold
+int updateThreshold = 3600000;//threshold for sending updates every hour
+int mult =100;//multiplier used in minim to get reasonable volume value
+int barkCount=0;//count total barks since last start
+int barkHour=0;//count hourly barks
+String barkGraph;
+
+PImage arthur;//declare image object
+int count;//prevents sound and LED from playing in first cycle
+
+void setup() { 
+
+  //sets window size, background, text colour  
+  size(500, 500);    
+  background(125);
+  smooth();
+  stroke(255, 25);
+  noFill();
+  arthur = loadImage("arthur.jpg");//initialize PImage, load image of Arthur
+
+  //Serial port setup
+  println(Serial.list());// list serial ports
+  port = new Serial(this, Serial.list()[6], 115200);//input correct index of serial port
+  port.bufferUntil('\n');//buffer until new line
+
+  //Audio setup
+  minim = new Minim (this);
+  in = minim.getLineIn (Minim.STEREO, 512);
+
+  //Twitter setup
+  hourMillis = millis();//set clock for hourly updates to Twiter
+  connectTwitter();//connect to Twitter   
+  //getTimeline();//get Twitter timeline, not used in this application
+
+    //Thresholds setup
+  timeThreshold = 180000;//threshold to only send a tweet every 180 seconds - avoids crashing Twitter acct
+  forceThreshold = 3;//calibrated force threshold - small dog
+  volThreshold = 10;//calibrated volume threshold - small dog
+}  
+
+void draw() { 
+
+  //----------------------------Backgrounds----------------------------------------  
+
+  //Screensaver mode
+  if (mouseX>480&&mouseY<20) {//if mouse in upper right corner, enter screensaver mode
+    fill(0, 1);//gradually darken screen so that words "fade)
+    rect(0, 0, width, height);//put the "darkening screen" over the whole window
+
+    //Draw a word from the list of words that we've built
+    int i = (frameCount % words.size());//frameCount starts from zero and increments each frame, words is an array of words limited in size to first 100 queries.  Effect of modulus or remainder is therefore to grab a new word each time through.
+    String word = words.get(i);//get an individual word from the words array
+
+    //Put it somewhere random on the stage, with a random size and colour
+    fill(0, 100, random(50, 150));
+    textSize(random(10, 30));
+    text(word, random(width), random(height));
+  }
+  //standard background mode  
+  else {//if mouse not in upper right corner, standard gray background
+    background(125);
+    smooth();
+    stroke(255, 25);
+    fill(255);
+    textSize(16);
+    text(msgOut, 80, 70, 400, 90);//prints whether Arthur is jumping or barking in grey window
+    image (arthur, 100, 120);//Arthur's image in middle of grey window
+  } 
+
+  //----------------------------end Background-------------------------------------
+
+  //----------------------------Sound inputs_______________________________________
+  volume = abs(int(in.right.get(1)*mult));//set volume variable equal to mic input value
+  //----------------------------end Sound inputs------------------------------------
+
+  //----------------------------Twitter inputs/key code-----------------------------  
+  if (homeKey.equals(twitterKey)) {//check for coded inbound Tweet
+    playSoundClip("artiesound.wav");//if match, play sound clip 
+    twitterKey="";//reset inbound Tweet code to prevent duplicate plays
+  }
+  //--------------------------end Twitter inputs/key code---------------------------
+
+  //---------------------------Graph-------------------------------------------------
+  keyPressed();//if up arrow key pressed, show graph.  If down arrow key pressed, return to main
+  //---------------------------End graph---------------------------------------------
+
+  //------------------Timers and messaging----------------------------------------------------
+  currHour = hour();//retrieve current hour
+  currMin = minute();//retrieve current minute
+  currSec = second();//retrieve current second
+
+    //various messages for different sound and volume
+  forceTwit = "At " + currHour + ":" + currMin + ":" + currSec + ", " +"Arthur said, I'm at the gate but I can't see you!";
+  barkTwit = "At " + currHour + ":" + currMin + ":" + currSec + ", "+ "Hello, anybody home?  I'm barking.";
+  mediumBarkTwit = "At " + currHour + ":" + currMin + ":" + currSec + ", "+ "Hey...come home & play.";
+  strongBarkTwit = "At " + currHour + ":" + currMin + ":" + currSec + ", " + "HEY! Why aren't you listening to me?!";
+  combinedTwit = "At " + currHour + ":" + currMin + ":" + currSec + ", "+ " Arthur jumped up on the gate AND barked.";
+
+  //send various messages to output window and to Twitter depending on Artie's activity
+  if ((millis()-prevMillis<timeThreshold)) {
+    if (ardInput1>forceThreshold) {
+      tempArd=ardInput1;//holds temporary force sensor value until time threshold hit
+      println(forceTwit);//prints message to console
+      msgOut=forceTwit;//prints message to main window
+      jumpCount++;//increment count of jumps since program began running
+      jumpHour++;//increment hourly count of jumps
+    } 
+    if (volume>=volThreshold) {
+      if (volume >=(volThreshold+20)) {
+        barkTwit = strongBarkTwit;
+      }
+
+      else if (volume>=(volThreshold+10)) {
+        barkTwit = mediumBarkTwit;
+      }
+
+      else if (volume>=(volThreshold)) {
+        barkTwit = barkTwit;
+      }
+
+      tempVolume = volume;
+      println(barkTwit);  
+      msgOut=barkTwit;
+      barkCount++;
+      barkHour++;
+    }
+  }
+
+  if ((millis() - prevMillis >= timeThreshold)) {
+
+    if ((ardInput1>=forceThreshold)&&(volume>=volThreshold)) {
+      combinedTwit = "At " + currHour + ":" + currMin + ":" + currSec + ","+ " Arthur jumped up on the gate AND barked."; 
+      println(combinedTwit);//print to console
+      msgOut=combinedTwit;//print to main window
+      postMsg(msgOut);//send Tweet 
+      prevMillis = millis();//reset clock
+      tempArd = 0;//reset temporary value
+      ardInput1=0;//reset force sensor value
+      volume = 0;//reset volume value
+      tempVolume=0;//reset temporary value
+    }
+
+    if ((tempArd>=forceThreshold)&&(tempVolume>=volThreshold)) {
+      combinedTwit = "At " + currHour + ":" + currMin + ":" + currSec + ","+ " Arthur jumped up on the gate AND barked."; 
+      println(combinedTwit);
+      msgOut=combinedTwit;
+      postMsg(msgOut); 
+      prevMillis = millis();
+      tempArd = 0;
+      ardInput1=0;
+      volume = 0;
+      tempVolume=0;
+    }
+
+    if (ardInput1>=forceThreshold)
+
+    {
+      println(forceTwit);
+      msgOut=forceTwit;
+      postMsg(msgOut); 
+      prevMillis = millis();
+      tempArd = 0;
+      jumpCount++;
+      jumpHour++;
+    }
+
+    if ((ardInput1<forceThreshold) && (tempArd>=forceThreshold)) {//even if current Arduino input is not over threshold, if it was at any time in last 3 mins, say that "Arthur jumped"
+
+      msgOut=forceTwit;
+      postMsg(msgOut);
+      prevMillis=millis();
+      tempArd = 0;
+    }
+
+    if (volume>=volThreshold)
+    {
+      if (volume >=(volThreshold+20)) {
+        barkTwit = strongBarkTwit;
+      }
+
+      else if (volume>=(volThreshold+10)) {
+        barkTwit = mediumBarkTwit;
+      }
+
+      else if (volume>=(volThreshold)) {
+        barkTwit = barkTwit;
+      }
+
+      println(barkTwit);  
+      msgOut=barkTwit; 
+      postMsg(msgOut); 
+      prevMillis = millis();
+      tempVolume=0;
+      barkCount++;
+      barkHour++;
+    }
+
+    if ((volume<volThreshold)&&(tempVolume>=volThreshold)) {
+      if (volume >=(volThreshold+20)) {
+        barkTwit = strongBarkTwit;
+      }
+
+      else if (volume>=(volThreshold+10)) {
+        barkTwit = mediumBarkTwit;
+      }
+
+      else if (volume>=(volThreshold)) {
+        barkTwit = barkTwit;
+      }
+
+      msgOut=barkTwit;
+      postMsg(msgOut); 
+      prevMillis = millis();
+      tempVolume=0;
+    }
+
+    getLastTweet();//check for new inbound Tweet, nested in timer, only happens every 3 mins
+
+    prevMillis=millis();//reset timer clock
+  }
+
+  hourlyUpdate();//send hourly update message to Twitter
+
+  //--------------------End Timers and Messaging---------------------------
+}//end draw function  
+
+//--------Connect to Twitter and create screensaver-----------------------------
+void connectTwitter() {  
+  ConfigurationBuilder cb = new ConfigurationBuilder();//configures authorization keys needed to access Twitter account  
+  cb.setOAuthConsumerKey("AOYMKGD6GqZ3Xyxp9XAY6w");//sets consumer key for Twitter access
+  cb.setOAuthConsumerSecret("qkFoydFGGWzK5IGEOPVKWmJ4zlvTzctwCSQanVGN0");//sets consumer secret for Twitter access
+  cb.setOAuthAccessToken("2165077101-IO01oVmfOTRnROIw71rwtgGAYSf3svtCeAbJCmT");//sets access token for Twitter access
+  cb.setOAuthAccessTokenSecret("mQzN7kWc7bYLHXIiF4z97y6f9lxEEaoT3WoNxFzDBRdHT");//sets secret access token for Twitter access 
+
+  twitterFactory = new TwitterFactory(cb.build());//declare and create TwitterFactory object using access codes above   
+  twitter = twitterFactory.getInstance();//get the current instance of the Twitter account information 
+
+  println("connected");//info/debug
+
+  //Get words from Artie's tweets for screensaver  
+  Query query = new Query("Artiethewestie");//search Twitter for tweets containing Artiethewestie - i.e., all Tweets sent by Arthur's account, and any mentions of him
+  query.count(100);//limit such tweets to the first 100 found
+
+  //Try making the query request.
+  try {
+    QueryResult result = twitter.search(query);//perform the query search and capture the results
+    ArrayList tweets = (ArrayList) result.getTweets();//put the results in an array
+
+    for (int i = 0; i < tweets.size(); i++) {//loop through the array
+      Status t=(Status) tweets.get(i);//for each tweet in the array, pull user, date, and actual text of tweet
+      User u=(User) t.getUser();//pull user info
+      String user=u.getName();//pull name from user info
+      String msg = t.getText();//pull message from text
+      Date d = t.getCreatedAt();//pull date
+      println("Tweet by " + user + " at " + d + ": " + msg);//info/debug
+
+        //Break the tweet into words
+      String[] input = msg.split(" ");//splits the message into an array of individual words
+      for (int j = 0;  j < input.length; j++) {//loops through the array
+        //Put each word into the words ArrayList
+        words.add(input[j]);//add each word to the GLOBAL ArrayList, words, so data is not lost each time function executes
+      }
+    };
+  }
+  //catch exceptions
+  catch (TwitterException te) {
+    println("Couldn't connect: " + te);
+  };
+} 
+//-------------end Connect to Twitter and create screensaver---------------------------
+
+//-------------Get tweets from Arthur's timeline---------------------------------------
+void getTimeline() {//retrieve Arthur's timeline from Twitter, used here primarily to ensure connection to Twitter is "live"    
+  try {        
+    statuses = twitter.getUserTimeline();//get the timeline
+  }   
+  //catch exceptions
+  catch(TwitterException e) {         
+    println("Get timeline: " + e + " Status code: " + e.getStatusCode());
+  }  
+  //print the individual tweets in the timeline  
+  for (Status status:statuses) {               
+    println(status.getUser().getName() + ": " + status.getText());
+  }
+}  
+//--------------end Get tweets from Arthur's timeline----------------------------------
+
+//--------------post message to Twitter------------------------------------------------
+void postMsg(String s) {
+  try {
+    Status status = twitter.updateStatus(s);//update Twitter status with new message - i.e., send a Tweet
+    println("new tweet --:{ " + status.getText() + " }:--");//print new Twitter message in console
+  }
+  //catch errors
+  catch(TwitterException e) {
+    println("Status Error: " + e + "; statusCode: " + e.getStatusCode());
+  }
+}
+//--------------end post message to Twitter--------------------------------------------
+
+//--------------read force sensor input from Arduino-----------------------------------
+void serialEvent (Serial port)//called whenever there is something available to read
+{
+  String inString = port.readStringUntil('\n');//read the force sensor value until new line character found
+
+  inString = trim(inString);//trim off any white space characters from the inbound value
+
+  int nums = int(inString);//convert the string to an integer so it can be compared to the threshold, which is an integer
+
+  if (nums >=forceThreshold) //if force sensor reading from Arduino is greater than threshold, Arthur is on the mat
+  { 
+    ardInput1=nums; //this is needed because the nums[] variable has a scope limited to this function, so it cannot be used in the draw function  
+    //ardInput1 is a global variable
+  }
+
+  if (nums<forceThreshold)//if force sensor reading is less than threshold, send "not jumping or barking" message
+  {
+    twitMessage = "Arthur is not jumping or barking.";//set Twitter message to "not jumping or barking"  
+    ardInput1=nums; //this is needed because the nums[] variable has a scope limited to this function, so it cannot be used in the draw function
+    //ardInput1 is a global variable   
+
+    msgOut=twitMessage;//display "not jumping or barking" message
+  }
+}
+
+//--------------end read force sensor input from Arduino--------------------------------
+
+//draw graph of barks and jumps if up key pressed, return to main window if down key pressed
+void keyPressed() {
+  if (key == CODED) {
+    if (keyCode == UP) {//if the up arrow is pressed
+      background(125);
+      fill(255);
+      rect(0, 20, barkCount, 40);//draw a horizontal rectangle, the length of which is equal to variable barkCount
+      barkGraph = "Arthur has barked " + barkCount + " times today.";//text under rectangle
+      noFill();
+      text(barkCount, barkCount+10, 40);//place text count of number of barks just to right of bar graph element
+      text(barkGraph, 20, 100);//place text string showing number of barks underneath bar graph element
+
+      fill(255);
+      rect(0, 120, jumpCount, 40);//same as above, for jumps
+      jumpGraph = "Arthur has jumped on the gate " + jumpCount + " times today.";//same as above, for jumps
+      noFill();
+      text(jumpCount, jumpCount+10, 140);//same as above, for jumps
+      text(jumpGraph, 20, 200);//same as above, for jumps
+    } 
+    else if (keyCode == DOWN) {//if the down arrow is pressed, return to main window
+
+      if (mouseX>480&&mouseY<20) {
+        fill(0, 1);
+        rect(0, 0, width, height);
+
+        //Draw a word from the list of words that we've built
+        int i = (frameCount % words.size());
+        String word = words.get(i);
+
+
+        //Put it somewhere random on the stage, with a random size and colour
+        fill(0, 100, random(50, 150));
+        textSize(random(10, 30));
+        text(word, random(width), random(height));
+      }
+
+      else {
+        background(125);
+        smooth();
+        stroke(255, 25);
+        fill(255);
+        textSize(16);
+        text(msgOut, 100, 70, 420, 90);//prints in grey window
+        image (arthur, 100, 120);
+      }
+    }
+  }
+}
+
+//-----------end draw graph of barks and jumps------------------------------------
+
+//----------send hourly update of jumps and barks to Twitter----------------------
+void hourlyUpdate() {
+
+  if ((millis()-hourMillis>=updateThreshold)) {//if an hour has passed, send a Tweet with hourly bark and jump totals
+
+    updateTwit = "In the last hour, " +  " Arthur jumped up on the gate " + jumpHour + " times, " + "and barked " + barkHour + " times."; 
+    println(updateTwit);//debug
+    msgOut=updateTwit;//send hourly update message to grey window
+    postMsg(msgOut);//Tweet hourly update message
+    hourMillis=millis();//reset hourly clock
+    jumpHour = 0;//reset hourly jumps counter
+    barkHour = 0;//reset hourly barks counter
+  }
+}
+//-----------end send hourly update of jumps and barks to Twitter
+
+//Search Twitter for key code Artiehome, if match send key to Processing(sound file) and Arduino(LED)
+
+String getLastTweet() {
+  String lastTweet = "";//declare and initialize string to hold last tweet found with coded keyword in it
+  String []splitTweet;//declare array to hold individual words in Tweets
+  String keyWord = "";//declare and initialize string to hold keyword
+  Query query = new Query("Artiehome");//declare Query object to search for keyword Artiehome
+  int ardKey=0;//declare key to be sent to Arduino (turns LED on)
+
+  try {
+    QueryResult result = twitter.search(query);//search Twitter for tweets with keyword Artiehome
+    ArrayList tweets = (ArrayList) result.getTweets();//put all Tweets matching that keyword in an ArrayList
+    Status t = (Status) tweets.get(0);//create status equal to first tweet in ArrayList, i.e., last tweet with the keyword in it
+    String user = t.getUser().getScreenName();//pull username out of status
+    lastTweet = t.getText();//set lastTweet variable to text in the status
+    Date d = t.getCreatedAt();//pull date out of status
+    if (lastTweet.equals(oldTweet)) {//compare lastTweet to previous lastTweet (i.e., oldTweet) to search for duplicates
+      keyWord ="null";//if it is a duplicate, set keyWord to null
+      //println("keyword is" +keyWord);//debug
+      twitterKey=keyWord;//set the twitterKey (which is compared to homeKey) to the keyWord, which is now "null" - no match
+    }
+    else {//if most recent tweet is not same as prior tweet
+      splitTweet = splitTokens(lastTweet);//split lastTweet into individual words
+      keyWord=splitTweet[0];//set keyWord to first word in splitTweet array
+      if (count>=1) {//prevents sound and light going off on start-up
+        twitterKey=keyWord;//set twitterKey to keyWord
+        ardKey=1;//set key which will set light blinking in Arduino to 1
+        port.write(ardKey);//send key to Arduino
+        delay(6000);//delay long enough for Arduino code to flash light 3 times
+      }
+      else {
+        twitterKey="no Twitter key";//if this is the first time through since start-up, set Twitter key so that light does not flash and sound file does not play 
+        //println(twitterKey);//debug
+      }
+      oldTweet=lastTweet;//set oldTweet variable to most recent Tweet, for "duplicate checking" purposes next time through
+      //println (" revised old tweet is" + oldTweet);//debug
+      count++;//increment counter so that light will flash and sound will play if not first time through code since start-up
+    }
+  }
+  //catch exceptions
+  catch (TwitterException te) {
+    println("Couldn't connect: " + te);
+    lastTweet = "Twitter Exception :(";
+  }; 
+
+  return twitterKey;//return twitterKey to calling function or program
+}
+
+//plays a sound file, or multiple files in future applications
+void playSoundClip (String soundClip1) {
+
+  int numClips = 1;//only 1 file in this application
+  Movie[]soundClips = new Movie[numClips];//create a new array object of class Movie with the number of sound clips passed in via the constructor
+  String [] clipNames = {
+    soundClip1
+  };//declare, create, and assign an array populated with sound clip titles (in this case ony one, but constructed this way for future applications with multiple files)
+  soundClips[0] = new Movie(this, clipNames[0]);//select the first sound clip from the clipNames array and put it into the soundClips array
+  soundClips[0].play();//play the sound clip
+}
