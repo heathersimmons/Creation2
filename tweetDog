@@ -461,7 +461,7 @@ void hourlyUpdate() {
     barkHour = 0;//reset hourly barks counter
   }
 }
-//-----------end send hourly update of jumps and barks to Twitter
+//-----------end send hourly update of jumps and barks to Twitter------------------
 
 //Search Twitter for key code Artiehome, if match send key to Processing(sound file) and Arduino(LED)
 
@@ -510,8 +510,9 @@ String getLastTweet() {
 
   return twitterKey;//return twitterKey to calling function or program
 }
+//--------------end search Twitter key for keycode Artiehome--------------------------
 
-//plays a sound file, or multiple files in future applications
+//--------------plays a sound file, or multiple files in future applications-----------
 void playSoundClip (String soundClip1) {
 
   int numClips = 1;//only 1 file in this application
