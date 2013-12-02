@@ -1,5 +1,10 @@
 //in order to run this file, add the jpg, "arthur.jpg", found at https://f.cloud.github.com/assets/5541270/1655109/d6b444a8-5b5b-11e3-867a-4aa92bac423f.jpg, to this sketch
 
+//code in getLastTweet() function modified from www.lucidtronix.com/tutorials/32
+//screensaver mode code in "Backgrounds" section modified from http://saglamdeniz.com/blog/?p=124
+//basics of minim/audio code developed with the aid of http://www.creativecoding.org/lesson/topics/audio/sound-in-processing
+
+
 import ddf.minim.spi.*;//minim library need for microphone input
 import ddf.minim.signals.*;
 import ddf.minim.*;
