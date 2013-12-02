@@ -1,5 +1,4 @@
-
-//in order to run this file, add the jpeg, "arthur.jpg", found in the Word document, to this sketch
+//in order to run this file, add the jpg, "arthur.jpg", found at https://f.cloud.github.com/assets/5541270/1655109/d6b444a8-5b5b-11e3-867a-4aa92bac423f.jpg, to this sketch
 
 import ddf.minim.spi.*;//minim library need for microphone input
 import ddf.minim.signals.*;
