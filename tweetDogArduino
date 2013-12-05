@@ -1,3 +1,4 @@
+//Project created by Areen Salam, Heather Simmons, and Laura Stavro-Beauchamp in November 2013
 
 int dogMat;//holds force sensor reading
 int lightKey;//holds input from Processing
